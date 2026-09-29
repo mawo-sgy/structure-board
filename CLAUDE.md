@@ -8,6 +8,7 @@ A pannable/zoomable canvas for sketching C data structures next to the code that
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # static site in dist/ (Vercel/Netlify)
+npm test         # Vitest unit tests (pure logic in src/board, tabs, geometry)
 ```
 
 Stack: React 18 + Vite, plain JS (no TypeScript), no component library, **inline styles only** (plus a few pseudo-element rules in `index.html`). One runtime dependency besides React: `html-to-image` (PNG export).
@@ -18,8 +19,23 @@ Stack: React 18 + Vite, plain JS (no TypeScript), no component library, **inline
 src/
   main.jsx            mounts <Workspace/>
   Workspace.jsx       tabs: { tabs, activeId, boards{id: boardState} }; debounced save (600ms)
-  Board.jsx           one board: canvas, pan/zoom, drag/resize/link, multi-select, undo/redo,
-                      copy/paste, keyboard, steps, JSON + PNG export
+  Board.jsx           one board: owns blocks/links/selection, wires the hooks below, renders the canvas
+  board/              board logic, split by concern
+    model.js          pure ops on blocks/links: slots, remove, copy groups, move, bbox, paste offset
+    history.js        pure undo/redo stack (compares states by reference)
+    steps.js          pure step helpers: dirty check, reference step, change detection, ←/→ target
+    arrows.js         arrow geometry from blocks + links + measured sizes
+    files.js          JSON serialize/parse, downloads, PNG capture (html-to-image)
+    clipboard.js      block clipboard (localStorage, works across tabs)
+    dom.js            isTyping / blurActive
+    useHistory.js     undo/redo hook: commits after a 400ms pause, or on drag end
+    useSteps.js       step timeline state + actions + Changes highlight
+    useMeasure.js     measures block sizes and [data-slot] anchors (ResizeObserver)
+    useViewport.js    pan/zoom state, wheel handling, toWorld, fitTo
+    useDrag.js        pointer gestures: pan, move selection, resize, link, box-select
+    useBoardKeys.js   keyboard shortcuts
+    *.test.js         Vitest tests for the pure modules
+  tabs.js             pure tab helpers (moveTab, nextBoardName, uniqueName)
   BlockFrame.jsx      positions a block; hover/selection affordances (toolbar, grip, resize, link dot)
   LinkArrow.jsx       SVG arrows + midpoint × delete target
   StepBar.jsx         step (snapshot) timeline UI; step rename (double-click) + per-step note
@@ -77,6 +93,10 @@ Storage keys: `structure-board:v2` (workspace). `structure-board:v1` (old single
 - `prev` = the same block in the reference step (or null) → tint changed values with `T.changed`.
 - `pointer` = `{ isLinked(slot), changed(slot), start(slot), clear(slot), spawn(slot, dx, dy) }` → used by `<PointerCell slot="…">`. `changed` = the slot points somewhere else than in the reference step. `spawn` creates a block of the same type at an offset and points `slot` at it (list "+ next node", tree "+ left/right").
 
+### Where logic goes
+
+Pure functions (no React, no DOM) go in `src/board/*.js` and get a test next to them. Hooks in `src/board/use*.js` hold state and call the pure functions. `Board.jsx` should stay wiring + rendering. Hooks that attach window listeners once read the latest values through a ref (`live.current = ctx`), never through stale closures.
+
 ### Selection, undo, clipboard
 
 - Selection is an array of ids (`sel`). Click selects, Shift+click toggles, Shift+drag on empty canvas box-selects, Ctrl+A selects all. Dragging a selected block moves the whole selection. `BlockFrame` gets `selected` (outline) and `solo` (toolbar + link dot only when exactly one is selected).
@@ -86,7 +106,7 @@ Storage keys: `structure-board:v2` (workspace). `structure-board:v1` (old single
 
 ### How arrows are measured
 
-`Board` measures each block's rendered size in a `useLayoutEffect` (plus a ResizeObserver) and every `[data-slot]` element's center (`sizes[id].anchors[slot]`). Plain links snap to block edges via `edgePoint`; slot links start at the slot center.
+`useMeasure` measures each block's rendered size in a `useLayoutEffect` (plus a ResizeObserver) and every `[data-slot]` element's center (`sizes[id].anchors[slot]`). Plain links snap to block edges via `edgePoint`; slot links start at the slot center.
 
 ## Rules — do not break
 
@@ -96,7 +116,8 @@ Storage keys: `structure-board:v2` (workspace). `structure-board:v1` (old single
 4. **No `window.prompt()`** — use inline controlled inputs.
 5. Controls under a block go in `<Controls>` (absolutely positioned) so they never change the measured block size.
 6. Elements inside a block that should not start a block drag need `data-nodrag` (inputs/buttons/selects are already excluded).
-7. `BlockFrame`'s ref callback must stay stable (`useCallback`) or the ResizeObserver loops.
+7. `BlockFrame`'s ref callback (`registerRef` from `useMeasure`) must stay stable (`useCallback`) or the ResizeObserver loops.
+8. Run `npm test` and `npm run build` before committing.
 
 ## Adding a block type
 

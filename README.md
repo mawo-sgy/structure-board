@@ -7,6 +7,7 @@ cd structure-board
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # static build in dist/ (Vercel/Netlify-ready)
+npm test           # unit tests (Vitest)
 ```
 
 ## Layout
@@ -17,7 +18,9 @@ src/
   Workspace.jsx       tabs: one board per tab, saved together
   StepBar.jsx         step snapshots timeline + change highlighting
   TabBar.jsx          bottom sheet tabs (double-click rename, right-click menu)
-  Board.jsx           canvas, pan/zoom, drag/resize/link, keyboard, persistence
+  Board.jsx           one board: state, wiring, canvas rendering
+  board/              board logic: pure modules (model, history, steps, arrows, files) + hooks + tests
+  tabs.js             tab list helpers
   BlockFrame.jsx      positions a block + hover/selection affordances (no card chrome)
   LinkArrow.jsx       SVG link arrows + midpoint delete target
   Toolbar.jsx         top toolbar + status bar
