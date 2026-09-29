@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Structure Board</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
+    <style>
+      html, body, #root { height: 100%; margin: 0; }
+      body { background: #f5f4f0; overflow: hidden; -webkit-font-smoothing: antialiased; }
+      input::placeholder, textarea::placeholder { color: #bdb8ad; }
+      .sb-code::placeholder { color: #6a6a6a; }
+      .sb-code::selection { background: #264f78; }
+      input[type=number] { -moz-appearance: textfield; }
+      input[data-cell]:focus { background: rgba(74,127,208,.09); }
+      [data-exporting] [data-noexport] { display: none !important; }
+      button:focus-visible, select:focus-visible { outline: 2px solid #4a7fd0; outline-offset: 1px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
