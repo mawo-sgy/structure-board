@@ -4,6 +4,7 @@ import { loadWorkspace, saveWorkspace, emptyBoard } from './storage.js';
 import Board from './Board.jsx';
 import { TabBar } from './TabBar.jsx';
 import { TEMPLATES } from './templates.js';
+import { moveTab, nextBoardName, uniqueName } from './tabs.js';
 
 // Owns the set of boards (tabs). Each tab remounts <Board> with its own state.
 export default function Workspace() {
@@ -19,33 +20,14 @@ export default function Workspace() {
     setWs((w) => ({ ...w, boards: { ...w.boards, [activeId]: state } }));
   }, [activeId]);
 
-  const nextName = (tabs) => {
-    let n = tabs.length + 1;
-    while (tabs.some((t) => t.name === `Board ${n}`)) n++;
-    return `Board ${n}`;
-  };
-
   const addTab = (templateKey) => setWs((w) => {
     const id = uid();
     const tpl = TEMPLATES.find((t) => t.key === templateKey);
-    let name = tpl ? tpl.name : nextName(w.tabs);
-    if (tpl && w.tabs.some((t) => t.name === name)) {
-      let n = 2;
-      while (w.tabs.some((t) => t.name === `${tpl.name} ${n}`)) n++;
-      name = `${tpl.name} ${n}`;
-    }
+    const name = tpl ? uniqueName(w.tabs, tpl.name) : nextBoardName(w.tabs);
     return { tabs: [...w.tabs, { id, name }], activeId: id, boards: { ...w.boards, [id]: tpl ? tpl.build() : emptyBoard() } };
   });
 
-  // Move tab `id` just before/after `targetId`.
-  const moveTab = (id, targetId, after) => setWs((w) => {
-    const tab = w.tabs.find((t) => t.id === id);
-    const rest = w.tabs.filter((t) => t.id !== id);
-    let i = rest.findIndex((t) => t.id === targetId);
-    if (!tab || i < 0) return w;
-    if (after) i++;
-    return { ...w, tabs: [...rest.slice(0, i), tab, ...rest.slice(i)] };
-  });
+  const reorderTab = (id, targetId, after) => setWs((w) => ({ ...w, tabs: moveTab(w.tabs, id, targetId, after) }));
 
   const renameTab = (id, name) => setWs((w) => ({ ...w, tabs: w.tabs.map((t) => (t.id === id ? { ...t, name } : t)) }));
 
@@ -88,7 +70,7 @@ export default function Workspace() {
           onRename={renameTab}
           onDuplicate={duplicateTab}
           onDelete={deleteTab}
-          onMove={moveTab}
+          onMove={reorderTab}
         />
       }
     />
