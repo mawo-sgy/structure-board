@@ -6,6 +6,8 @@ import { ArrowDefs, LinkArrow } from './LinkArrow.jsx';
 import { Toolbar, StatusBar } from './Toolbar.jsx';
 import { StepBar } from './StepBar.jsx';
 import { ContextMenu } from './ContextMenu.jsx';
+import { StepZone } from './StepZone.jsx';
+import { rectAround } from './board/zones.js';
 import { removeBlocks, cloneGroup, instantiateGroup, bboxOf, pasteOffset, offsetTo, setSlot, clearSlot, slotOf } from './board/model.js';
 import { buildArrows, buildDraftArrow } from './board/arrows.js';
 import { readClip, writeClip, hasClip, nextPasteCount } from './board/clipboard.js';
@@ -27,6 +29,7 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
   const [sel, setSel] = useState([]);
   const [exporting, setExporting] = useState(false);
   const [menu, setMenu] = useState(null); // right-click menu: { x, y } in canvas px, world: { x, y }
+  const [zoneMode, setZoneMode] = useState(false); // drawing a new step zone
 
   const canvasRef = useRef(null);
   const worldRef = useRef(null);
@@ -37,21 +40,28 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
 
   const { view, setView, viewRef, toWorld, visibleRect, zoomCenter, fitTo } = useViewport(initial.view, canvasRef);
   const { sizes, sizesRef, nodes, registerRef } = useMeasure(blocks);
-  const steps = useSteps({ initial, blocks, links, setBlocks, setLinks, onLoad: () => setSel([]) });
+  const steps = useSteps({ initial, blocks, links, sizes, setBlocks, setLinks, onLoad: () => setSel([]) });
   const history = useHistory({ blocks, links, setBlocks, setLinks, isDragging: () => !!drag.current, onRestore: () => setSel([]) });
-  const { draft, box, onCanvasDown, frameDown, resizeDown, connectDown } = useDrag(drag, {
+  const {
+    draft, box, onCanvasDown, onCanvasDownCapture, frameDown, resizeDown, connectDown, zoneHeaderDown, zoneResizeDown,
+  } = useDrag(drag, {
     canvasRef, viewRef, blocksRef, sizesRef, selRef, nodes, toWorld,
     setView, setBlocks, setLinks, setSel, commit: history.commit,
+    zoneMode, membersOf: steps.membersOf, updateZone: steps.updateZone,
+    onZoneDrawn: (r) => { setZoneMode(false); if (r) steps.addZone(r); },
+    onZoneMoved: steps.shiftZoneSteps,
   });
+  // S and arrow keys act on the zone whose steps are open, otherwise on the whole board.
+  const scope = steps.openZone;
 
   // ---- persistence: report every change up; the workspace debounces the save
   const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
   const firstRun = useRef(true);
-  const { steps: stepList, viewing, backup, showChanges } = steps;
+  const { board: { steps: stepList, viewing, backup }, zones, showChanges } = steps;
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
-    onChangeRef.current?.({ blocks, links, view, steps: stepList, viewing, backup, showChanges });
-  }, [blocks, links, view, stepList, viewing, backup, showChanges]);
+    onChangeRef.current?.({ blocks, links, view, steps: stepList, viewing, backup, showChanges, zones });
+  }, [blocks, links, view, stepList, viewing, backup, showChanges, zones]);
 
   // ---- block operations
   const updateBlock = (id, p) => setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, ...p } : b)));
@@ -105,16 +115,32 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
 
   const fitAll = () => { if (blocksRef.current.length) fitTo(bboxOf(blocksRef.current, sizesRef.current)); };
 
+  // ---- step zones: with blocks selected, wrap them; otherwise draw the zone with the mouse.
+  const startZone = () => {
+    const ids = new Set(selRef.current);
+    if (ids.size) {
+      steps.addZone(rectAround(bboxOf(blocksRef.current.filter((b) => ids.has(b.id)), sizesRef.current)));
+      setSel([]);
+    } else {
+      setZoneMode((m) => !m);
+    }
+  };
+  const deleteZone = (z) => {
+    const n = z.steps.length;
+    if (n && !window.confirm(`Delete "${z.name}" and its ${n} step${n === 1 ? '' : 's'}? The blocks stay on the board.`)) return;
+    steps.deleteZone(z.id);
+  };
+
   // ---- import / export
   const base = fileBase(name);
-  const exportJson = () => downloadJson(serializeBoard({ blocks, links, view, steps: stepList }), `${base}.json`);
+  const exportJson = () => downloadJson(serializeBoard({ blocks, links, view, steps: stepList, zones }), `${base}.json`);
 
   const importFile = async (file) => {
     try {
       const d = parseBoardFile(await readFileText(file), isKnownType);
       setBlocks(d.blocks);
       setLinks(d.links);
-      steps.reset(d.steps);
+      steps.reset(d.steps, d.zones);
       if (d.view) setView(d.view);
       setSel([]);
     } catch (err) {
@@ -149,12 +175,35 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
     duplicate: () => duplicate(selRef.current),
     remove: () => remove(selRef.current),
     selectAll,
-    deselect: () => { setSel([]); setMenu(null); },
+    deselect: () => { setSel([]); setMenu(null); setZoneMode(false); },
     hasSelection: () => selRef.current.length > 0,
     fitAll,
-    saveStep: steps.save,
-    stepBy: steps.stepBy,
+    saveStep: () => steps.save(scope),
+    stepBy: (d) => steps.stepBy(scope, d),
   });
+
+  // StepBar props for a scope (null = whole board, or a zone id).
+  const stepBarProps = (zid) => {
+    const tl = zid ? zones.find((z) => z.id === zid) : steps.board;
+    return {
+      steps: tl.steps,
+      viewingId: tl.viewing,
+      dirty: steps.dirtyOf(zid),
+      hasBackup: !!tl.backup,
+      showChanges,
+      onSave: () => steps.save(zid),
+      onLoad: (id) => steps.load(zid, id),
+      onUpdate: () => steps.update(zid),
+      onDelete: () => steps.remove(zid),
+      onLive: () => steps.backToLive(zid),
+      onPrev: () => steps.stepBy(zid, -1),
+      onNext: () => steps.stepBy(zid, 1),
+      onToggleChanges: steps.toggleChanges,
+      onRename: (id, label) => steps.patch(zid, id, { label }),
+      onNote: (id, note) => steps.patch(zid, id, { note }),
+    };
+  };
+  const openZ = zones.find((z) => z.id === scope);
 
   // ---- what block bodies use to draw and edit pointers
   const pointerApi = (b) => ({
@@ -217,14 +266,18 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
         onExport={exportJson}
         onExportImage={exportImage}
         onImport={importFile}
+        zoneMode={zoneMode}
+        onStepZone={startZone}
       />
 
       <div
         ref={canvasRef}
         onPointerDown={onCanvasDown}
+        onPointerDownCapture={onCanvasDownCapture}
         onContextMenu={onContextMenu}
         style={{
           flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none',
+          cursor: zoneMode ? 'crosshair' : undefined,
           backgroundColor: T.bg,
           backgroundImage: `radial-gradient(${T.dot} 1.1px, transparent 1.4px)`,
           backgroundSize: `${grid}px ${grid}px`,
@@ -232,6 +285,15 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
         }}
       >
         <div ref={worldRef} style={{ position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})` }}>
+          {zones.map((z) => (
+            <StepZone key={z.id} zone={z} stepCount={z.steps.length}
+              onHeaderDown={zoneHeaderDown(z)}
+              onResizeDown={zoneResizeDown(z)}
+              onToggle={() => steps.toggleZone(z.id)}
+              onRename={(name) => steps.updateZone(z.id, { name })}
+              onDelete={() => deleteZone(z)} />
+          ))}
+
           <svg style={{ position: 'absolute', left: 0, top: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none', zIndex: 0 }}>
             <ArrowDefs />
             {arrows.map((a) => (
@@ -268,30 +330,29 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
           {box && (
             <div style={{
               position: 'absolute', left: box.x0, top: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0,
-              border: `${1 / view.s}px dashed ${T.select}`, background: 'rgba(143,169,214,0.08)', pointerEvents: 'none', zIndex: 20,
+              border: `${(zoneMode ? 1.5 : 1) / view.s}px dashed ${T.select}`, borderRadius: zoneMode ? 10 : 0,
+              background: 'rgba(143,169,214,0.08)', pointerEvents: 'none', zIndex: 20,
             }} />
           )}
         </div>
 
         {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems()} onClose={() => setMenu(null)} />}
 
-        <StepBar
-          steps={stepList}
-          viewingId={viewing}
-          dirty={steps.dirty}
-          hasBackup={!!backup}
-          showChanges={showChanges}
-          onSave={steps.save}
-          onLoad={steps.load}
-          onUpdate={steps.update}
-          onDelete={steps.remove}
-          onLive={steps.backToLive}
-          onPrev={() => steps.stepBy(-1)}
-          onNext={() => steps.stepBy(1)}
-          onToggleChanges={steps.toggleChanges}
-          onRename={(id, label) => steps.patch(id, { label })}
-          onNote={(id, note) => steps.patch(id, { note })}
-        />
+        {zoneMode && (
+          <div data-noexport style={{
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9, pointerEvents: 'none',
+            background: T.ink, color: '#fff', font: `12px ${T.sans}`, padding: '6px 12px', borderRadius: 6,
+          }}>
+            Drag a rectangle around the area to trace · Esc to cancel
+          </div>
+        )}
+
+        {openZ ? (
+          <StepBar {...stepBarProps(openZ.id)} title={openZ.name}
+            placement={{ left: Math.max(8, openZ.x * view.s + view.x), top: (openZ.y + openZ.h) * view.s + view.y + 10 }} />
+        ) : (
+          <StepBar {...stepBarProps(null)} />
+        )}
       </div>
 
       {tabBar}

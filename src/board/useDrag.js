@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { moveBlocks, blocksInRect, setSlot, addLink } from './model.js';
+import { rectFromPoints, MIN_ZONE } from './zones.js';
 import { isTyping, blurActive } from './dom.js';
 
 const INTERACTIVE = 'input, textarea, button, select, [data-nodrag]';
@@ -7,11 +8,11 @@ const INTERACTIVE = 'input, textarea, button, select, [data-nodrag]';
 export const TEXT_FIELD = 'input, textarea';
 
 // Every pointer gesture on the canvas: pan, move (the whole selection), resize, link/pointer
-// drag, and Shift+drag box-select. `drag` (a ref owned by Board) holds the gesture in progress,
+// drag, Shift+drag box-select, and step zones (draw, move with their blocks, resize). `drag` (a ref owned by Board) holds the gesture in progress,
 // so history can skip committing mid-drag. `ctx` is read fresh on every event.
 export function useDrag(drag, ctx) {
   const [draft, setDraft] = useState(null); // link being drawn: { from, slot, x, y }
-  const [box, setBox] = useState(null);     // box-select rectangle in world coords
+  const [box, setBox] = useState(null);     // box-select / zone-draw rectangle in world coords
   const live = useRef(ctx);
   live.current = ctx;
 
@@ -39,6 +40,21 @@ export function useDrag(drag, ctx) {
         setBox(r);
         const hits = blocksInRect(c.blocksRef.current, c.sizesRef.current, r);
         c.setSel([...new Set([...d.base, ...hits])]);
+      } else if (d.kind === 'zone-draw') {
+        const p = c.toWorld(e.clientX, e.clientY);
+        setBox({ x0: Math.min(d.x, p.x), y0: Math.min(d.y, p.y), x1: Math.max(d.x, p.x), y1: Math.max(d.y, p.y) });
+      } else if (d.kind === 'zone-move') {
+        if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 3) return;
+        d.moved = true;
+        const dx = (e.clientX - d.sx) / v.s, dy = (e.clientY - d.sy) / v.s;
+        d.dx = dx; d.dy = dy;
+        c.updateZone(d.id, { x: Math.round(d.zx + dx), y: Math.round(d.zy + dy) });
+        c.setBlocks((bs) => moveBlocks(bs, d.starts, dx, dy));
+      } else if (d.kind === 'zone-resize') {
+        c.updateZone(d.id, {
+          w: Math.max(MIN_ZONE, Math.round(d.w + (e.clientX - d.sx) / v.s)),
+          h: Math.max(MIN_ZONE, Math.round(d.h + (e.clientY - d.sy) / v.s)),
+        });
       }
     };
 
@@ -55,6 +71,15 @@ export function useDrag(drag, ctx) {
         setTimeout(() => live.current.commit(), 0);
       } else if (d.kind === 'box') {
         setBox(null);
+      } else if (d.kind === 'zone-draw') {
+        setBox(null);
+        const r = rectFromPoints({ x: d.x, y: d.y }, c.toWorld(e.clientX, e.clientY));
+        c.onZoneDrawn(r.w >= MIN_ZONE && r.h >= MIN_ZONE ? r : null);
+      } else if (d.kind === 'zone-move') {
+        if (d.moved) {
+          c.onZoneMoved(d.id, d.dx, d.dy);
+          setTimeout(() => live.current.commit(), 0);
+        }
       } else if (d.kind === 'link') {
         const to = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-block-id]')?.getAttribute('data-block-id');
         if (to && to !== d.id) c.setLinks((ls) => (d.slot ? setSlot(ls, d.id, d.slot, to) : addLink(ls, d.id, to)));
@@ -66,6 +91,37 @@ export function useDrag(drag, ctx) {
     window.addEventListener('pointerup', up);
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
   }, []);
+
+  // Zone-drawing mode: any press on the canvas (even over a block) starts the rectangle.
+  const onCanvasDownCapture = (e) => {
+    const c = live.current;
+    if (!c.zoneMode || e.button !== 0) return;
+    e.stopPropagation(); e.preventDefault();
+    blurActive();
+    const p = c.toWorld(e.clientX, e.clientY);
+    drag.current = { kind: 'zone-draw', x: p.x, y: p.y };
+    setBox({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+  };
+
+  // Drag a zone's name: move the zone and the blocks inside it.
+  const zoneHeaderDown = (z) => (e) => {
+    if (e.button !== 0) return;
+    const c = live.current;
+    e.stopPropagation(); e.preventDefault();
+    blurActive();
+    const ids = new Set(c.membersOf(z.id));
+    const starts = {};
+    for (const b of c.blocksRef.current) if (ids.has(b.id)) starts[b.id] = { x: b.x, y: b.y };
+    drag.current = { kind: 'zone-move', id: z.id, zx: z.x, zy: z.y, starts, sx: e.clientX, sy: e.clientY };
+    document.body.style.cursor = 'grabbing';
+  };
+
+  const zoneResizeDown = (z) => (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); e.preventDefault();
+    drag.current = { kind: 'zone-resize', id: z.id, w: z.w, h: z.h, sx: e.clientX, sy: e.clientY };
+    document.body.style.cursor = 'nwse-resize';
+  };
 
   // Empty canvas: pan, or box-select with Shift.
   const onCanvasDown = (e) => {
@@ -134,5 +190,5 @@ export function useDrag(drag, ctx) {
     document.body.style.cursor = 'crosshair';
   };
 
-  return { draft, box, onCanvasDown, frameDown, resizeDown, connectDown };
+  return { draft, box, onCanvasDown, onCanvasDownCapture, frameDown, resizeDown, connectDown, zoneHeaderDown, zoneResizeDown };
 }

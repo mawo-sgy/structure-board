@@ -24,12 +24,14 @@ src/
     model.js          pure ops on blocks/links: slots, remove, copy groups, move, bbox, paste offset
     history.js        pure undo/redo stack (compares states by reference)
     steps.js          pure step helpers: dirty check, reference step, change detection, ←/→ target
+    timeline.js       pure step timeline ops (save/load/update/delete/live/←→) for the board or a zone
+    zones.js          pure step-zone helpers: members (block center inside), zone content, replace, shift
     arrows.js         arrow geometry from blocks + links + measured sizes
     files.js          JSON serialize/parse, downloads, PNG capture (html-to-image)
     clipboard.js      block clipboard (localStorage, works across tabs)
     dom.js            isTyping / blurActive
     useHistory.js     undo/redo hook: commits after a 400ms pause, or on drag end
-    useSteps.js       step timeline state + actions + Changes highlight
+    useSteps.js       board + zone timelines, zones, Changes highlight; actions take a scope (null | zoneId)
     useMeasure.js     measures block sizes and [data-slot] anchors (ResizeObserver)
     useViewport.js    pan/zoom state, wheel handling, toWorld, fitTo
     useDrag.js        pointer gestures: pan, move selection, resize, link, box-select
@@ -39,7 +41,9 @@ src/
   BlockFrame.jsx      positions a block; hover/selection affordances (toolbar, grip, resize, link dot)
   LinkArrow.jsx       SVG arrows + midpoint × delete target
   ContextMenu.jsx     right-click menu (copy / cut / paste here / duplicate / select all / delete)
-  StepBar.jsx         step (snapshot) timeline UI; step rename (double-click) + per-step note
+  StepBar.jsx         step (snapshot) timeline UI; step rename (double-click) + per-step note;
+                      bottom-center for the board, or `placement` under a zone
+  StepZone.jsx        step zone frame + header (name, Steps toggle, ×) + resize corner
   TabBar.jsx          bottom sheet tabs (drag to reorder) + "new board / template" menu
   Toolbar.jsx         top toolbar (add-block selects, undo/redo, export menu) + status bar
   templates.js        starter boards (build() returns a fresh board state; walkthrough() adds recorded steps)
@@ -57,7 +61,10 @@ src/
 
 ```js
 // board state (one per tab)
-{ blocks, links, view: {x, y, s}, steps, viewing, backup, showChanges }
+{ blocks, links, view: {x, y, s}, steps, viewing, backup, showChanges, zones }
+
+// step zone: its own timeline for part of the canvas
+{ id, name, x, y, w, h, open, steps, viewing, backup }
 
 // block (type-specific fields are flat on the block)
 { id, type, x, y, w?, color: null|'blue'|'green'|'red'|'yellow', ...fields }
@@ -98,6 +105,14 @@ Storage keys: `structure-board:v2` (workspace). `structure-board:v1` (old single
 
 Pure functions (no React, no DOM) go in `src/board/*.js` and get a test next to them. Hooks in `src/board/use*.js` hold state and call the pure functions. `Board.jsx` should stay wiring + rendering. Hooks that attach window listeners once read the latest values through a ref (`live.current = ctx`), never through stale closures.
 
+### Step zones
+
+- Toolbar "Step zone": with blocks selected it wraps them (`rectAround`), otherwise it enters draw mode (`zoneMode`; `onPointerDownCapture` on the canvas starts the rectangle even over a block). Esc cancels.
+- A zone's members are the blocks whose center is inside it, computed when needed (`zoneMembers`), never stored. A zone step stores those blocks plus the links that start from them. Loading a zone step (`replaceZoneContent`) replaces only the zone's blocks and their outgoing links.
+- Only one zone is open at a time. While one is open its StepBar sits under it (screen space), the board's StepBar is hidden, and S / ←/→ act on that zone (`scope` in Board).
+- Dragging a zone's name moves the zone and its blocks; on release `shiftTimeline` moves its saved steps by the same amount so they stay clean.
+- Changes highlight: a block inside a zone with steps is compared with that zone's reference step, other blocks with the board's.
+
 ### Selection, undo, clipboard
 
 - Selection is an array of ids (`sel`). Click selects, Shift+click toggles (anywhere on the block, cells included: `BlockFrame`'s onMouseDown stops the cell taking focus), Shift+drag on empty canvas box-selects, Ctrl+A selects all. Dragging a selected block moves the whole selection. `BlockFrame` gets `selected` (outline) and `solo` (toolbar + link dot only when exactly one is selected).
@@ -135,4 +150,6 @@ Esc deselect · Delete/Backspace delete selection · Ctrl+Z undo · Ctrl+Shift+Z
 
 - Tree nodes have no auto-layout: "+ left/right" places children at a fixed offset, so deep trees can overlap.
 - Changes highlight for struct fields, stack/queue items and table cells compares by position, not id.
+- Zones are not in undo history (creating, moving the frame, deleting). Deleting a zone with steps asks first.
+- Zones can overlap; a block in two zones with steps is highlighted against the first one.
 - `Structure Board Preview.html` (outside this folder) was a single-file preview built by concatenating `src/` — not needed here.

@@ -13,8 +13,8 @@ export function download(href, filename) {
   a.click();
 }
 
-export function serializeBoard({ blocks, links, view, steps }) {
-  return JSON.stringify({ blocks, links, view, steps }, null, 2);
+export function serializeBoard({ blocks, links, view, steps, zones = [] }) {
+  return JSON.stringify({ blocks, links, view, steps, zones }, null, 2);
 }
 
 export function downloadJson(text, filename) {
@@ -24,7 +24,7 @@ export function downloadJson(text, filename) {
 }
 
 // Parse an exported board file. Throws with a readable message if it is not one.
-// Blocks of unknown types are dropped; missing links/steps become empty; view may be null.
+// Blocks of unknown types are dropped; missing links/steps/zones become empty; view may be null.
 export function parseBoardFile(text, isKnownType = () => true) {
   const d = JSON.parse(text);
   if (!d || !Array.isArray(d.blocks)) throw new Error('missing blocks');
@@ -32,6 +32,7 @@ export function parseBoardFile(text, isKnownType = () => true) {
     blocks: d.blocks.filter((b) => isKnownType(b.type)),
     links: Array.isArray(d.links) ? d.links : [],
     steps: Array.isArray(d.steps) ? d.steps : [],
+    zones: Array.isArray(d.zones) ? d.zones.map((z) => ({ ...z, open: false, viewing: null, backup: null })) : [],
     view: d.view || null,
   };
 }

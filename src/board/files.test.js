@@ -17,13 +17,14 @@ describe('board files', () => {
       links: [{ id: 'l', from: 'a', to: 'a' }],
       view: { x: 3, y: 4, s: 1.5 },
       steps: [{ id: 's', label: 'start', note: 'hi', blocks: [], links: [] }],
+      zones: [{ id: 'z', name: 'Zone 1', x: 0, y: 0, w: 100, h: 100, open: false, steps: [], viewing: null, backup: null }],
     };
     expect(parseBoardFile(serializeBoard(board))).toEqual(board);
   });
 
   it('fills in missing parts of older files', () => {
     const d = parseBoardFile(JSON.stringify({ blocks: [] }));
-    expect(d).toEqual({ blocks: [], links: [], steps: [], view: null });
+    expect(d).toEqual({ blocks: [], links: [], steps: [], zones: [], view: null });
   });
 
   it('drops blocks of unknown types', () => {

@@ -10,9 +10,11 @@ const sbPanel = { background: '#fff', border: `1px solid ${T.rule}`, borderRadiu
 // Older boards saved "Step N" as the label; treat that (or empty) as "no custom name".
 const customLabel = (s) => (s.label && !/^Step \d+$/.test(s.label) ? s.label : '');
 
-// Floating timeline of saved board states ("steps") for tracing an algorithm.
-// Double-click a step to rename it; the note line above the bar describes the step being viewed.
-export function StepBar({ steps, viewingId, dirty, hasBackup, showChanges, onSave, onLoad, onUpdate, onDelete, onLive, onPrev, onNext, onToggleChanges, onRename, onNote }) {
+// Floating timeline of saved states ("steps") for tracing an algorithm — of the whole board
+// (centered at the bottom of the canvas) or of one step zone (`placement` = { left, top } in
+// canvas pixels, under the zone). Double-click a step to rename it; the note line describes the
+// step being viewed.
+export function StepBar({ steps, viewingId, dirty, hasBackup, showChanges, onSave, onLoad, onUpdate, onDelete, onLive, onPrev, onNext, onToggleChanges, onRename, onNote, title = 'Steps', placement = null }) {
   const [editing, setEditing] = useState(null);
   const [draftName, setDraftName] = useState('');
   const noteRef = useRef(null);
@@ -28,9 +30,11 @@ export function StepBar({ steps, viewingId, dirty, hasBackup, showChanges, onSav
 
   return (
     <div data-nodrag data-noexport style={{
-      position: 'absolute', left: '50%', bottom: 14, transform: 'translateX(-50%)', zIndex: 8,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, maxWidth: 'calc(100% - 28px)',
+      position: 'absolute', zIndex: 8, display: 'flex', flexDirection: 'column', gap: 6,
       font: `12px ${T.sans}`, color: T.ink,
+      ...(placement
+        ? { left: placement.left, top: placement.top, alignItems: 'flex-start' }
+        : { left: '50%', bottom: 14, transform: 'translateX(-50%)', alignItems: 'center', maxWidth: 'calc(100% - 28px)' }),
     }}>
       {cur && (
         <div style={{ ...sbPanel, width: 480, display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 12px' }}>
@@ -51,7 +55,7 @@ export function StepBar({ steps, viewingId, dirty, hasBackup, showChanges, onSav
       )}
 
       <div style={{ ...sbPanel, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px 5px 12px', whiteSpace: 'nowrap' }}>
-        <span style={{ color: T.muted, fontWeight: 500, flex: 'none' }}>Steps</span>
+        <span style={{ color: placement ? COLORS.blue.dot : T.muted, fontWeight: 500, flex: 'none' }}>{title}</span>
         {has && <button title="Previous step (←)" onClick={onPrev} style={sbNav}>‹</button>}
         <div style={{ display: 'flex', gap: 4, overflowX: 'auto', minWidth: 0 }}>
           {steps.map((s, i) => {
@@ -90,10 +94,10 @@ export function StepBar({ steps, viewingId, dirty, hasBackup, showChanges, onSav
         </div>
         {has && <button title="Next step (→)" onClick={onNext} style={sbNav}>›</button>}
         <span style={{ width: 1, height: 18, background: T.rule, margin: '0 2px', flex: 'none' }} />
-        <button onClick={onSave} title="Save the board as a new step (S)" style={sbAct}>
+        <button onClick={onSave} title={placement ? 'Save this zone as a new step (S)' : 'Save the board as a new step (S)'} style={sbAct}>
           {has ? '+ Save step' : '+ Save as step 1'}
         </button>
-        {cur && dirty && <button onClick={onUpdate} title="Overwrite this step with the board" style={sbAct}>Update {idx + 1}</button>}
+        {cur && dirty && <button onClick={onUpdate} title={placement ? 'Overwrite this step with the zone' : 'Overwrite this step with the board'} style={sbAct}>Update {idx + 1}</button>}
         {cur && <button onClick={onDelete} style={{ ...sbAct, color: COLORS.red.dot }}>Delete {idx + 1}</button>}
         {has && (
           <button onClick={onToggleChanges} title="Highlight values and arrows that changed since the previous step"

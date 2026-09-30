@@ -5,7 +5,7 @@ import { BLOCK_DEFS, MENUS } from './blocks/index.js';
 const tbBtn = { font: `500 12px ${T.sans}`, color: T.ink, background: '#fff', border: `1px solid ${T.rule}`, borderRadius: 6, padding: '5px 10px', cursor: 'pointer', lineHeight: '16px', whiteSpace: 'nowrap', flex: 'none' };
 const tbSelect = { font: `500 12px ${T.sans}`, color: T.ink, background: '#fff', border: `1px solid ${T.rule}`, borderRadius: 6, padding: '5px 8px', cursor: 'pointer', height: 28, whiteSpace: 'nowrap', flex: 'none' };
 
-export function Toolbar({ onAdd, zoom, onZoomIn, onZoomOut, onReset, onUndo, onRedo, canUndo, canRedo, onExport, onExportImage, onImport }) {
+export function Toolbar({ onAdd, zoom, onZoomIn, onZoomOut, onReset, onUndo, onRedo, canUndo, canRedo, onExport, onExportImage, onImport, zoneMode, onStepZone }) {
   const fileRef = useRef(null);
   return (
     <header style={{
@@ -30,6 +30,11 @@ export function Toolbar({ onAdd, zoom, onZoomIn, onZoomOut, onReset, onUndo, onR
 
       <button onClick={() => onAdd('code')} style={{ ...tbBtn, background: '#1e1e1e', color: '#d4d4d4', borderColor: '#1e1e1e', display: 'flex', gap: 6, alignItems: 'center' }}>
         <span style={{ color: '#569cd6', fontFamily: T.mono, fontSize: 11, fontWeight: 600 }}>&lt;/&gt;</span>Code
+      </button>
+
+      <button onClick={onStepZone} title="Trace steps in one area: select blocks first, or draw the area"
+        style={{ ...tbBtn, ...(zoneMode ? { background: T.ink, color: '#fff', borderColor: T.ink } : null) }}>
+        ▭ Step zone
       </button>
 
       <span style={{ width: 1, height: 20, background: T.rule, margin: '0 4px' }} />
