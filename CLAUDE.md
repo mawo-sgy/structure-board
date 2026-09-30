@@ -38,6 +38,7 @@ src/
   tabs.js             pure tab helpers (moveTab, nextBoardName, uniqueName)
   BlockFrame.jsx      positions a block; hover/selection affordances (toolbar, grip, resize, link dot)
   LinkArrow.jsx       SVG arrows + midpoint × delete target
+  ContextMenu.jsx     right-click menu (copy / cut / paste here / duplicate / select all / delete)
   StepBar.jsx         step (snapshot) timeline UI; step rename (double-click) + per-step note
   TabBar.jsx          bottom sheet tabs (drag to reorder) + "new board / template" menu
   Toolbar.jsx         top toolbar (add-block selects, undo/redo, export menu) + status bar
@@ -101,7 +102,8 @@ Pure functions (no React, no DOM) go in `src/board/*.js` and get a test next to 
 
 - Selection is an array of ids (`sel`). Click selects, Shift+click toggles, Shift+drag on empty canvas box-selects, Ctrl+A selects all. Dragging a selected block moves the whole selection. `BlockFrame` gets `selected` (outline) and `solo` (toolbar + link dot only when exactly one is selected).
 - Undo covers `{ blocks, links }` only (not view, steps or step notes). Edits are committed to history after a 400ms pause; drags/resizes are committed on pointer-up. History is per board and is lost when switching tabs (the board remounts).
-- Copy/cut/paste/duplicate copy the selected blocks plus the links between them, with fresh ids.
+- Copy/cut/paste/duplicate copy the selected blocks plus the links between them, with fresh ids. Right-click (on a block or empty canvas) opens `ContextMenu` with the same actions; "Paste here" puts the group's top-left corner at the click point. Right-clicking a block outside the selection selects it; text fields keep the browser's menu.
+- `remove` and `insert` call `history.commit()` first, so each one is its own undo step.
 - Anything with `data-noexport` is hidden from the PNG export. SVG parts can't be hidden that way (html-to-image skips computed styles for SVG), so `LinkArrow` gets no `onDelete` while exporting.
 
 ### How arrows are measured
@@ -127,7 +129,7 @@ Pure functions (no React, no DOM) go in `src/board/*.js` and get a test next to 
 
 ## Keyboard
 
-Esc deselect · Delete/Backspace delete selection · Ctrl+Z undo · Ctrl+Shift+Z / Ctrl+Y redo · Ctrl+C / X / V copy, cut, paste · Ctrl+D duplicate · Ctrl+A select all · F fit all · S save step · ←/→ browse steps · Ctrl/⌘+scroll zoom · plain scroll pans · Shift+drag box-select. Code/Note: Tab, Shift+Tab, Enter auto-indent.
+Esc deselect · Delete/Backspace delete selection · Ctrl+Z undo · Ctrl+Shift+Z / Ctrl+Y redo · Ctrl+C / X / V copy, cut, paste · Ctrl+D duplicate · Ctrl+A select all · F fit all · S save step · ←/→ browse steps · Ctrl/⌘+scroll zoom · plain scroll pans · Shift+drag box-select · right-click for the copy/paste menu. Code/Note: Tab, Shift+Tab, Enter auto-indent.
 
 ## Known gaps / next ideas
 

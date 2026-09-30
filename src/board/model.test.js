@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   slotOf, setSlot, clearSlot, addLink, removeBlocks, cloneGroup, instantiateGroup,
-  moveBlocks, bboxOf, blocksInRect, pasteOffset,
+  moveBlocks, bboxOf, blocksInRect, pasteOffset, offsetTo,
 } from './model.js';
 
 const blk = (id, x = 0, y = 0, type = 'list') => ({ id, type, x, y });
@@ -77,6 +77,11 @@ describe('copy / paste groups', () => {
     const vis = { x0: 0, y0: 0, x1: 500, y1: 500 };
     expect(pasteOffset(blocks, vis, 1)).toEqual({ dx: 28, dy: 28 });
     expect(pasteOffset(blocks, vis, 2)).toEqual({ dx: 56, dy: 56 });
+  });
+
+  it('offsetTo puts the top-left corner of the group on the point', () => {
+    expect(offsetTo(blocks, { x: 200, y: 300 })).toEqual({ dx: 190, dy: 290 });
+    expect(offsetTo([blk('a', 40, 5), blk('b', 10, 60)], { x: 0, y: 0 })).toEqual({ dx: -10, dy: -5 });
   });
 
   it('pasteOffset centers the group when the originals are off screen', () => {

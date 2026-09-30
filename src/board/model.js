@@ -88,3 +88,8 @@ export function pasteOffset(blocks, vis, count) {
   if (gx > vis.x0 && gx < vis.x1 && gy > vis.y0 && gy < vis.y1) return { dx: 28 * count, dy: 28 * count };
   return { dx: (vis.x0 + vis.x1) / 2 - gx - 90, dy: (vis.y0 + vis.y1) / 2 - gy - 40 };
 }
+
+// Offset that moves a group so its top-left corner lands on point p (paste at the cursor).
+export function offsetTo(blocks, p) {
+  return { dx: p.x - Math.min(...blocks.map((b) => b.x)), dy: p.y - Math.min(...blocks.map((b) => b.y)) };
+}

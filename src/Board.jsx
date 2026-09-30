@@ -5,7 +5,8 @@ import { BlockFrame } from './BlockFrame.jsx';
 import { ArrowDefs, LinkArrow } from './LinkArrow.jsx';
 import { Toolbar, StatusBar } from './Toolbar.jsx';
 import { StepBar } from './StepBar.jsx';
-import { removeBlocks, cloneGroup, instantiateGroup, bboxOf, pasteOffset, setSlot, clearSlot, slotOf } from './board/model.js';
+import { ContextMenu } from './ContextMenu.jsx';
+import { removeBlocks, cloneGroup, instantiateGroup, bboxOf, pasteOffset, offsetTo, setSlot, clearSlot, slotOf } from './board/model.js';
 import { buildArrows, buildDraftArrow } from './board/arrows.js';
 import { readClip, writeClip, hasClip, nextPasteCount } from './board/clipboard.js';
 import { fileBase, download, serializeBoard, downloadJson, parseBoardFile, readFileText, capturePng } from './board/files.js';
@@ -25,6 +26,7 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
   const [links, setLinks] = useState(initial.links || []);
   const [sel, setSel] = useState([]);
   const [exporting, setExporting] = useState(false);
+  const [menu, setMenu] = useState(null); // right-click menu: { x, y } in canvas px, world: { x, y }
 
   const canvasRef = useRef(null);
   const worldRef = useRef(null);
@@ -54,8 +56,11 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
   // ---- block operations
   const updateBlock = (id, p) => setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, ...p } : b)));
 
+  // Discrete actions (remove, insert) first commit any pending edit, so each is its own undo step
+  // even when it follows another change within the 400ms history pause.
   const remove = (ids) => {
     if (!ids.length) return;
+    history.commit();
     const r = removeBlocks(blocksRef.current, linksRef.current, ids);
     setBlocks(r.blocks);
     setLinks(r.links);
@@ -64,6 +69,7 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
 
   // Add a copied group with fresh ids, shifted by (dx, dy), and select it.
   const insert = (group, dx, dy) => {
+    history.commit();
     const g = instantiateGroup(group, dx, dy, isKnownType);
     setBlocks((bs) => [...bs, ...g.blocks]);
     setLinks((ls) => [...ls, ...g.links]);
@@ -79,6 +85,14 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
     const { dx, dy } = pasteOffset(c.blocks, visibleRect(), nextPasteCount());
     insert(c, dx, dy);
   };
+  const pasteAt = (p) => {
+    const c = readClip();
+    if (!c?.blocks?.length) return;
+    const { dx, dy } = offsetTo(c.blocks, p);
+    insert(c, dx, dy);
+  };
+  const cut = () => { copy(); remove(selRef.current); };
+  const selectAll = () => setSel(blocksRef.current.map((b) => b.id));
 
   const addBlock = (type) => {
     const def = BLOCK_DEFS[type];
@@ -129,13 +143,13 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
     undo: history.undo,
     redo: history.redo,
     copy,
-    cut: () => { copy(); remove(selRef.current); },
+    cut,
     paste,
     canPaste: hasClip,
     duplicate: () => duplicate(selRef.current),
     remove: () => remove(selRef.current),
-    selectAll: () => setSel(blocksRef.current.map((b) => b.id)),
-    deselect: () => setSel([]),
+    selectAll,
+    deselect: () => { setSel([]); setMenu(null); },
     hasSelection: () => selRef.current.length > 0,
     fitAll,
     saveStep: steps.save,
@@ -156,6 +170,32 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
       setSel([nb.id]);
     },
   });
+
+  // ---- right-click menu: on a block (selecting it unless it is already part of the selection)
+  // or on empty canvas. Text fields keep the browser's own menu.
+  const onContextMenu = (e) => {
+    if (e.target.closest('input, textarea, select')) return;
+    const id = e.target.closest('[data-block-id]')?.getAttribute('data-block-id');
+    if (!id && e.target !== canvasRef.current) return;
+    e.preventDefault();
+    if (id && !selRef.current.includes(id)) setSel([id]);
+    const r = canvasRef.current.getBoundingClientRect();
+    setMenu({ x: e.clientX - r.left, y: e.clientY - r.top, world: toWorld(e.clientX, e.clientY) });
+  };
+
+  const menuItems = () => {
+    const n = sel.length;
+    const many = n > 1 ? ` ${n} blocks` : '';
+    return [
+      { label: `Copy${many}`, hint: 'Ctrl+C', disabled: !n, onClick: copy },
+      { label: `Cut${many}`, hint: 'Ctrl+X', disabled: !n, onClick: cut },
+      { label: 'Paste here', hint: 'Ctrl+V', disabled: !hasClip(), onClick: () => pasteAt(menu.world) },
+      { label: `Duplicate${many}`, hint: 'Ctrl+D', disabled: !n, onClick: () => duplicate(sel) },
+      'sep',
+      { label: 'Select all', hint: 'Ctrl+A', disabled: !blocks.length, onClick: selectAll },
+      { label: `Delete${many}`, hint: 'Del', disabled: !n, danger: true, onClick: () => remove(sel) },
+    ];
+  };
 
   const arrows = buildArrows(blocks, links, sizes, steps.linkChanged);
   const draftArrow = buildDraftArrow(blocks, sizes, draft);
@@ -182,6 +222,7 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
       <div
         ref={canvasRef}
         onPointerDown={onCanvasDown}
+        onContextMenu={onContextMenu}
         style={{
           flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none',
           backgroundColor: T.bg,
@@ -231,6 +272,8 @@ export default function Board({ initial, name = 'board', onChange, tabBar }) {
             }} />
           )}
         </div>
+
+        {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems()} onClose={() => setMenu(null)} />}
 
         <StepBar
           steps={stepList}

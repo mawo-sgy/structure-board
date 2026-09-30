@@ -68,7 +68,7 @@ export function StatusBar({ blockCount, linkCount, selCount = 0 }) {
       background: T.chrome, borderTop: `1px solid ${T.rule}`, font: `11.5px ${T.sans}`, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden',
     }}>
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        Drag empty space to pan · Shift+drag to box-select · Ctrl/⌘ + scroll to zoom · Ctrl+Z undo · Ctrl+C / V copy-paste (works across tabs) · F fit all · S save step · ←/→ browse steps · Drag a pointer cell onto a block to link it
+        Drag empty space to pan · Shift+drag to box-select · Ctrl/⌘ + scroll to zoom · Ctrl+Z undo · right-click or Ctrl+C / V to copy-paste (works across tabs) · F fit all · S save step · ←/→ browse steps · Drag a pointer cell onto a block to link it
       </span>
       <span style={{ fontFamily: T.mono, flex: 'none' }}>
         {selCount > 1 ? `${selCount} selected · ` : ''}{blockCount} block{blockCount === 1 ? '' : 's'} · {linkCount} arrow{linkCount === 1 ? '' : 's'} · saved automatically

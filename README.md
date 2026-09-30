@@ -37,7 +37,7 @@ src/
 
 - Blocks: arrays with index markers, 2D arrays, list and tree nodes with pointer arrows, stack, queue, struct, memory table, variables/pointers, table, notes, post-its, headings, code.
 - Steps: save snapshots (S), replay with ← / →, rename a step (double-click), write a note per step, and see what changed (values and arrows) since the previous step.
-- Editing: undo/redo, multi-select (Shift+click or Shift+drag), copy/paste between tabs, duplicate.
+- Editing: undo/redo, multi-select (Shift+click or Shift+drag), copy/paste between tabs, duplicate. Right-click a block or the canvas for Copy / Cut / Paste here / Duplicate / Delete.
 - Tabs: one board per tab, drag to reorder, start from a template.
 - Export a board as a PNG image or a JSON file (JSON includes steps); import JSON.
 
