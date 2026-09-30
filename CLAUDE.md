@@ -100,7 +100,7 @@ Pure functions (no React, no DOM) go in `src/board/*.js` and get a test next to 
 
 ### Selection, undo, clipboard
 
-- Selection is an array of ids (`sel`). Click selects, Shift+click toggles, Shift+drag on empty canvas box-selects, Ctrl+A selects all. Dragging a selected block moves the whole selection. `BlockFrame` gets `selected` (outline) and `solo` (toolbar + link dot only when exactly one is selected).
+- Selection is an array of ids (`sel`). Click selects, Shift+click toggles (anywhere on the block, cells included: `BlockFrame`'s onMouseDown stops the cell taking focus), Shift+drag on empty canvas box-selects, Ctrl+A selects all. Dragging a selected block moves the whole selection. `BlockFrame` gets `selected` (outline) and `solo` (toolbar + link dot only when exactly one is selected).
 - Undo covers `{ blocks, links }` only (not view, steps or step notes). Edits are committed to history after a 400ms pause; drags/resizes are committed on pointer-up. History is per board and is lost when switching tabs (the board remounts).
 - Copy/cut/paste/duplicate copy the selected blocks plus the links between them, with fresh ids. Right-click (on a block or empty canvas) opens `ContextMenu` with the same actions; "Paste here" puts the group's top-left corner at the click point. Right-clicking a block outside the selection selects it; text fields keep the browser's menu.
 - `remove` and `insert` call `history.commit()` first, so each one is its own undo step.

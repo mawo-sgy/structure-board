@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { T, COLORS, COLOR_KEYS } from './theme.js';
+import { TEXT_FIELD } from './board/useDrag.js';
 
 const frameBarBtn = { font: `500 11px ${T.sans}`, color: T.ink, background: 'transparent', border: 'none', padding: '2px 6px', cursor: 'pointer', borderRadius: 4 };
 
@@ -20,6 +21,9 @@ export function BlockFrame({ block, selected, solo = selected, registerRef, onFr
       ref={refCb}
       data-block-id={id}
       onPointerDown={onFrameDown}
+      // Shift+click on a cell selects the block (see useDrag); stop the cell taking focus or
+      // starting a text selection. preventDefault on pointerdown alone does not do that.
+      onMouseDown={(e) => { if (e.shiftKey && e.target.closest(TEXT_FIELD)) e.preventDefault(); }}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
       style={{ position: 'absolute', left: block.x, top: block.y, width: block.w ?? 'max-content', zIndex: selected ? 3 : hover ? 2 : 1 }}

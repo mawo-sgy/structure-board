@@ -3,6 +3,8 @@ import { moveBlocks, blocksInRect, setSlot, addLink } from './model.js';
 import { isTyping, blurActive } from './dom.js';
 
 const INTERACTIVE = 'input, textarea, button, select, [data-nodrag]';
+// Text cells: a plain click edits them, a Shift+click adds/removes the block from the selection.
+export const TEXT_FIELD = 'input, textarea';
 
 // Every pointer gesture on the canvas: pan, move (the whole selection), resize, link/pointer
 // drag, and Shift+drag box-select. `drag` (a ref owned by Board) holds the gesture in progress,
@@ -82,17 +84,21 @@ export function useDrag(drag, ctx) {
     document.body.style.cursor = 'grabbing';
   };
 
-  // Click selects; Shift+click adds/removes; dragging a selected block moves the whole selection.
-  // A plain click on a block of a multi-selection collapses the selection to it on release.
+  // Click selects; Shift+click adds/removes (also on a cell); dragging a selected block moves the
+  // whole selection. A plain click on a block of a multi-selection collapses the selection to it
+  // on release.
   const frameDown = (b) => (e) => {
     if (e.button !== 0) return;
     const c = live.current;
     const cur = c.selRef.current;
     const onInput = !!e.target.closest(INTERACTIVE);
+    const onField = !!e.target.closest(TEXT_FIELD);
     let ids = cur, collapseTo = null;
-    if (e.shiftKey && !onInput) {
+    if (e.shiftKey && (!onInput || onField)) {
       if (cur.includes(b.id)) { e.preventDefault(); c.setSel(cur.filter((x) => x !== b.id)); return; }
       ids = [...cur, b.id];
+      // On a cell: select only (no drag, no editing). BlockFrame stops the cell taking focus.
+      if (onField) { e.preventDefault(); blurActive(); c.setSel(ids); return; }
     } else if (onInput || !cur.includes(b.id)) {
       ids = [b.id];
     } else if (cur.length > 1) {
